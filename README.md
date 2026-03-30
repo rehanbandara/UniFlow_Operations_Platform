@@ -24,3 +24,50 @@ Secure authentication using OAuth 2.0 with permissions for users, admins, and op
 A responsive React interface focused on clarity, speed, and ease of use.
 
 ---
+
+---
+
+## 🧱 Tech Stack
+
+- **Frontend:** React (Hooks, Router, modern UI components)  
+- **Backend:** Java Spring Boot (REST API, validation, security)  
+- **Database:** SQL or NoSQL (deployment‑flexible)  
+- **Authentication:** OAuth 2.0 (Google login)  
+- **Notifications:** Server‑side events / API‑driven alerts  
+- **CI/CD:** GitHub Actions for automated builds and testing  
+- **Version Control:** GitHub with structured branching and clean commits  
+
+---
+---
+
+## 📂 Folder Structure (Example)
+frontend/
+src/
+components/
+pages/
+hooks/
+services/
+
+backend/
+src/main/java/
+auth/
+resource/
+booking/
+ticket/
+notification/
+
+
+---
+
+## 📸 Screenshots 
+
+
+
+---
+
+## 📄 License
+
+This project is for educational and development purposes.
+
+
+
