@@ -16,6 +16,7 @@ Receive instant updates when bookings are approved, tickets change status, or ne
 Secure authentication using OAuth 2.0 with permissions for users, admins, and optional technician roles.
 ### **Clean, Modern UI**
 A responsive React interface focused on clarity, speed, and ease of use.
+
 ---
 
 ---
@@ -32,7 +33,7 @@ A responsive React interface focused on clarity, speed, and ease of use.
 ---
 ---
 
-## 📂 Folder Structure (Example)
+## 📂 Folder Structure
 
 
 
