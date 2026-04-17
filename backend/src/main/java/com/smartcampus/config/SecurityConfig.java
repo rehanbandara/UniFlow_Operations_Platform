@@ -27,8 +27,18 @@ import java.nio.charset.StandardCharsets;
 
 import static org.springframework.security.config.annotation.web.builders.HttpSecurity.*;
 
+
+
+// Module 02 - PHASE 1   for import this and add @EnableMethodSecurity annotation
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+
+
+
 @Configuration
 @EnableWebSecurity
+
+@EnableMethodSecurity
+
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
