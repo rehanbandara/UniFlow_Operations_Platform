@@ -1,91 +1,102 @@
-# Authentication Module (Spring Boot 3 + React)
+# RBAC Module (Role-Based Access Control)
 
-This branch delivers the **complete authentication backbone** for the **PAF Smart Campus Operations Hub**. It establishes a secure, role‑ready identity layer that all subsequent modules (facility, booking, ticketing, notifications) will depend on.
+This branch delivers the **RBAC extension** for the **PAF Smart Campus Operations Hub**. It enforces role-based restrictions for admin features, ensuring only authorized users can access sensitive routes and APIs.
 
 ---
 
 ## ✅ Features Implemented
-- **OAuth 2.0 login (Google Sign‑In)**
-- **JWT‑based stateless security**
-- **Role‑ready user model** (`ROLE_USER`, `ROLE_ADMIN`, extensible for future roles)
-- **Protected REST APIs**
-- **React frontend with Context API + protected routing**
-- **Clean `/api/user/me` endpoint** for integration across modules
+
+### Backend
+- **RoleService.java**
+  - Assigns/removes roles (`ROLE_USER`, `ROLE_ADMIN`)
+  - Validates role names
+  - Ensures users always retain at least one role
+- **AdminController.java**
+  - `GET /api/admin/users` → list all users
+  - `POST /api/admin/roles/assign` → assign a role to a user
+  - Secured with `@PreAuthorize("hasRole('ADMIN')")`
+- **SecurityConfig.java**
+  - Updated with `@EnableMethodSecurity` to activate method-level security
+
+### Frontend
+- **AdminDashboard.jsx**
+  - Displays users in a table (name/email/roles)
+  - Assigns `ROLE_ADMIN` via `/api/admin/roles/assign`
+  - Handles 401/403 cleanly
+- **ProtectedRoute.jsx**
+  - Supports `requiredRole`
+  - Redirects unauthorized users to `/unauthorized`
+- **App.jsx**
+  - Added `/admin` route (protected by `ROLE_ADMIN`)
+  - Added `/unauthorized` route
 
 ---
 
-## 🔄 End‑to‑End Flow
-1. User clicks **Google Login** in React.
-2. Redirect to backend OAuth endpoint.
-3. Google authenticates the user.
-4. Backend:
-   - Creates user in MongoDB if new, or loads existing.
-   - Generates **JWT** (subject = user email).
-   - Redirects to frontend callback with token.
-5. Frontend:
-   - Saves JWT in `localStorage`.
-   - Calls `/api/user/me` with `Authorization: Bearer <token>`.
-   - Stores user in Context.
-   - Redirects to protected dashboard.
-6. All subsequent API calls use JWT header.
+## 🔄 How to Test This Module
 
----
+### 1. Backend Verification (RBAC Enforcement)
 
-## 🛠 Backend (Spring Boot 3 / MongoDB / JWT / OAuth2)
-- **BackendApplication.java** — Loads `.env`, starts Spring Boot.
-- **SecurityConfig.java** — Stateless session, JWT filter, OAuth2 login handlers.
-- **JwtTokenProvider.java** — Generates/validates JWTs.
-- **JwtAuthenticationFilter.java** — Extracts token, loads user, sets `SecurityContext`.
-- **OAuthUserService.java** — Processes Google profile, delegates to `UserService`.
-- **User.java** — MongoDB document, unique email, roles.
-- **Role.java** — Role object (`ROLE_USER`, `ROLE_ADMIN`).
-- **UserRepository.java** — Mongo repository with `findByEmail`.
-- **UserService.java** — User creation, sync, retrieval.
-- **UserController.java** — `GET /api/user/me` endpoint.
+1. **Enable method security**
+   - Confirm `@EnableMethodSecurity` is active in `SecurityConfig`
+   - Restart backend
 
----
+2. **Create users**
+   - Log in with Google using at least two accounts
+   - Both accounts default to `ROLE_USER`
 
-## 🎨 Frontend (React 18 + Context API)
-- **App.jsx** — Routing (`/login`, `/oauth2/callback`, `/dashboard`).
-- **AuthContext.jsx** — Auth state manager, token storage, refresh logic.
-- **Login.jsx** — Google login button → backend OAuth.
-- **OAuthCallback.jsx** — Handles JWT callback, fetches user, redirects.
-- **ProtectedRoute.jsx** — Guards protected routes, redirects unauthenticated users.
-
----
-
-## 🔗 Connections
-- **Login.jsx → backend OAuth endpoint**
-- **Google → SecurityConfig.oauth2Login()**
-- **OAuthUserService → UserService → UserRepository → MongoDB**
-- **JwtTokenProvider → JWT generation**
-- **Frontend callback → AuthContext → `/api/user/me`**
-- **JwtAuthenticationFilter → UserController**
-
----
-
-## 🎯 Alignment with University Requirements
-- OAuth 2.0 login (Google Sign‑In) ✔
-- Role‑ready user model ✔
-- Secure backend APIs ✔
-- React frontend with protected routes ✔
-- REST endpoint `/api/user/me` ✔
-- Stable foundation for facility, booking, ticketing, notifications ✔
-
----
-
-## 📂 Next Steps
-- Extend roles for technicians, admins.
-- Integrate facility/booking modules using `/api/user/me`.
-- Add notification service leveraging authenticated user context.
+3. **Bootstrap first admin**
+   - Update MongoDB manually for one user:
+   ```json
+   "roles": [
+     { "name": "ROLE_USER" },
+     { "name": "ROLE_ADMIN" }
+   ]
 
 
-This module testing for
-Auth google
-# for check go to the : Open browser: http://localhost:8081/oauth2/authorization/google
-# After login, confirm browser redirects to: http://localhost:3000/oauth2/callback?token=...
-# That mean 'GOOGLE OAUTH2' is working
-# also run this on postman : GET  - http://localhost:8081/api/user/me
+
+
+
+Test APIs
+
+As ROLE_USER:
+
+GET /api/admin/users → 403 Forbidden
+
+As ROLE_ADMIN:
+
+GET /api/admin/users → 200 OK, returns users
+
+POST /api/admin/roles/assign → assigns admin role to another user
+
+2. Frontend Verification (Route + UI)
+Non-admin user
+
+Visit /admin → redirected to /unauthorized
+
+Admin user
+
+Visit /admin → AdminDashboard loads
+
+Users table visible
+
+“Make Admin” button assigns role and refreshes table
+
+Dashboard link
+
+From /dashboard, “Go to Admin Dashboard”:
+
+Admin → opens dashboard
+
+Non-admin → redirected to unauthorized
+
+🎯 Summary
+Backend: RBAC enforced with RoleService, AdminController, and @PreAuthorize
+
+Frontend: Admin UI with protected routes and unauthorized handling
+
+Testing: Verified via Postman/curl for backend, and React routes for frontend
+
+Dependencies: Requires react-router-dom (already installed)
 
 
 
