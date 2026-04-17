@@ -78,3 +78,14 @@ This branch delivers the **complete authentication backbone** for the **PAF Smar
 - Extend roles for technicians, admins.
 - Integrate facility/booking modules using `/api/user/me`.
 - Add notification service leveraging authenticated user context.
+
+
+This module testing for
+Auth google
+# for check go to the : Open browser: http://localhost:8081/oauth2/authorization/google
+# After login, confirm browser redirects to: http://localhost:3000/oauth2/callback?token=...
+# That mean 'GOOGLE OAUTH2' is working
+# also run this on postman : GET  - http://localhost:8081/api/user/me
+
+
+
