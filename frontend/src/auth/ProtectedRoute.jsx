@@ -1,43 +1,33 @@
-import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import React, { useMemo } from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
 
-function userHasRole(user, roleName) {
+function hasRole(user, roleName) {
   const roles = user?.roles;
   if (!Array.isArray(roles)) return false;
   return roles.some((r) => r?.name === roleName);
 }
 
-/**
- * ProtectedRoute
- * - Blocks access if no JWT token
- * - Optionally enforces a requiredRole (e.g., ROLE_ADMIN)
- *
- * Usage:
- * <Route element={<ProtectedRoute />}> ... </Route>
- * <Route element={<ProtectedRoute requiredRole="ROLE_ADMIN" />}> ... </Route>
- */
 export default function ProtectedRoute({ requiredRole }) {
+  const location = useLocation();
   const { token, user, loading } = useAuth();
 
-  if (loading) {
-    return <div style={{ padding: 24 }}>Loading...</div>;
+  const authed = !!token;
+
+  const roleOk = useMemo(() => {
+    if (!requiredRole) return true;
+    return hasRole(user, requiredRole);
+  }, [user, requiredRole]);
+
+  // Prevent flicker/incorrect UI during hydration
+  if (loading) return null;
+
+  if (!authed) {
+    return <Navigate to="/landing" replace state={{ from: location.pathname }} />;
   }
 
-  if (!token) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // If a role is required, ensure user is loaded and has that role
-  if (requiredRole) {
-    // If user hasn't loaded yet (should be rare after loading=false), show loading
-    if (!user) {
-      return <div style={{ padding: 24 }}>Loading user...</div>;
-    }
-
-    if (!userHasRole(user, requiredRole)) {
-      return <Navigate to="/unauthorized" replace />;
-    }
+  if (!roleOk) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <Outlet />;

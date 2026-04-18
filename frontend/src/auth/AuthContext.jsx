@@ -1,92 +1,66 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081";
+
 const AuthContext = createContext(null);
 
-const API_BASE_URL = "http://localhost:8081";
-const TOKEN_STORAGE_KEY = "token";
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return ctx;
-}
-
-async function fetchMe(token) {
-  const res = await fetch(`${API_BASE_URL}/api/user/me`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (res.status === 401 || res.status === 403) {
-    throw new Error("Unauthorized");
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Failed to fetch user: ${res.status} ${text}`);
-  }
-
-  return res.json();
-}
-
 export default function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_STORAGE_KEY));
+  const [token, setTokenState] = useState(() => localStorage.getItem("token") || "");
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // true until we attempt refreshMe once
 
-  const clearAuth = () => {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    setToken(null);
-    setUser(null);
-  };
-
-  const loginWithToken = async (newToken) => {
-    localStorage.setItem(TOKEN_STORAGE_KEY, newToken);
-    setToken(newToken);
-
-    const me = await fetchMe(newToken);
-    setUser(me);
+  const setToken = (nextToken) => {
+    const t = nextToken || "";
+    setTokenState(t);
+    if (t) localStorage.setItem("token", t);
+    else localStorage.removeItem("token");
   };
 
   const logout = () => {
-    clearAuth();
+    setToken("");
+    setUser(null);
   };
 
   const refreshMe = async () => {
-    if (!token) return;
-    try {
-      const me = await fetchMe(token);
-      setUser(me);
-    } catch (e) {
-      // Token invalid/expired -> clear
-      clearAuth();
+    const t = localStorage.getItem("token") || token;
+    if (!t) {
+      setUser(null);
+      return null;
     }
+
+    const res = await fetch(`${API_BASE_URL}/api/user/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${t}`,
+      },
+    });
+
+    // If backend returns 401/403, token is not usable
+    if (!res.ok) {
+      const err = new Error(`Failed to fetch user profile (status ${res.status})`);
+      err.status = res.status;
+
+      // Clear local auth on 401
+      if (res.status === 401) logout();
+      throw err;
+    }
+
+    const data = await res.json();
+    setUser(data);
+    return data;
   };
 
+  // On app start, attempt to load /me if token exists
   useEffect(() => {
-    // Initial bootstrap on app load
-    const init = async () => {
-      const existingToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (!existingToken) {
-        setLoading(false);
-        return;
-      }
-
+    (async () => {
       try {
-        setToken(existingToken);
-        const me = await fetchMe(existingToken);
-        setUser(me);
-      } catch (e) {
-        clearAuth();
+        if (token) await refreshMe();
+      } catch (_) {
+        // ignore - refreshMe already clears token if needed
       } finally {
         setLoading(false);
       }
-    };
-
-    init();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -95,12 +69,19 @@ export default function AuthProvider({ children }) {
       token,
       user,
       loading,
-      loginWithToken,
-      logout,
+      setToken,
+      setUser,
       refreshMe,
+      logout,
     }),
     [token, user, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
 }

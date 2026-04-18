@@ -1,52 +1,79 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import Card from "../../components/ui/Card.jsx";
 import { useAuth } from "../../auth/AuthContext.jsx";
+import { useToast } from "../../components/ui/ToastProvider.jsx";
+
+function hasRole(user, roleName) {
+  const roles = user?.roles;
+  if (!Array.isArray(roles)) return false;
+  return roles.some((r) => r?.name === roleName);
+}
 
 export default function OAuthCallback() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const { loginWithToken } = useAuth();
-
-  const [error, setError] = useState("");
-  const ranRef = useRef(false);
+  const [params] = useSearchParams();
+  const toast = useToast();
+  const { setToken, refreshMe, logout } = useAuth();
 
   useEffect(() => {
-    // Guard against React 18 StrictMode double-invoking effects in dev
-    if (ranRef.current) return;
-    ranRef.current = true;
-
-    const params = new URLSearchParams(location.search);
     const token = params.get("token");
 
     if (!token) {
-      setError("Token not found in callback URL.");
+      toast.push({ variant: "error", title: "Login failed", message: "Missing token." });
+      navigate("/landing", { replace: true });
       return;
     }
 
     (async () => {
       try {
-        await loginWithToken(token);
-        navigate("/dashboard", { replace: true });
+        setToken(token);
+        const me = await refreshMe();
+
+        if (hasRole(me, "ROLE_ADMIN")) {
+          toast.push({ variant: "success", title: "Welcome", message: "Signed in as admin." });
+          navigate("/dashboard", { replace: true });
+        } else {
+          toast.push({ variant: "success", title: "Welcome", message: "Signed in successfully." });
+          navigate("/home", { replace: true });
+        }
       } catch (e) {
-        setError(e?.message || "Login failed.");
+        logout();
+        toast.push({
+          variant: "error",
+          title: "Session error",
+          message: "Could not complete sign-in. Please try again.",
+        });
+        navigate("/landing", { replace: true });
       }
     })();
-  }, [location.search, loginWithToken, navigate]);
-
-  if (error) {
-    return (
-      <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
-        <h2>OAuth Callback Error</h2>
-        <p>{error}</p>
-        <button onClick={() => navigate("/login", { replace: true })}>Back to Login</button>
-      </div>
-    );
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
-      <h2>Signing you in...</h2>
-      <p>Please wait.</p>
-    </div>
+    <Card style={styles.card}>
+      <div style={styles.spinner} aria-label="loading" />
+      <div style={styles.title}>Completing sign-in…</div>
+      <div style={styles.subtitle}>Loading your profile and redirecting to the correct page.</div>
+    </Card>
   );
 }
+
+const styles = {
+  card: {
+    width: "min(520px, 100%)",
+    textAlign: "center",
+    padding: 18,
+  },
+  title: { fontSize: 14, fontWeight: 900, marginTop: 10 },
+  subtitle: { marginTop: 6, color: "#a9b7d5", fontSize: 13, lineHeight: 1.5 },
+  spinner: {
+    width: 34,
+    height: 34,
+    borderRadius: "50%",
+    border: "4px solid rgba(255,255,255,0.18)",
+    borderTopColor: "rgba(59,130,246,0.9)",
+    animation: "spin 1s linear infinite",
+    margin: "0 auto",
+  },
+};

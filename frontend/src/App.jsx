@@ -1,85 +1,84 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import AuthProvider, { useAuth } from "./auth/AuthContext.jsx";
-import Login from "./features/user/Login.jsx";
-import OAuthCallback from "./features/user/OAuthCallback.jsx";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+
+import AuthProvider from "./auth/AuthContext.jsx";
 import ProtectedRoute from "./auth/ProtectedRoute.jsx";
+import { ToastProvider } from "./components/ui/ToastProvider.jsx";
+
+import PublicLayout from "./layouts/PublicLayout.jsx";
+import AppLayout from "./layouts/AppLayout.jsx";
+
+import Landing from "./pages/Landing.jsx";
+import Login from "./features/user/Login.jsx";
+import Signup from "./features/user/Signup.jsx";
+import OAuthCallback from "./features/user/OAuthCallback.jsx";
+
+import Home from "./pages/Home.jsx";
+import Facilities from "./features/facility/Facilities.jsx";
+import FacilityDetails from "./features/facility/FacilityDetails.jsx";
+
+import Dashboard from "./pages/Dashboard.jsx";
 import AdminDashboard from "./features/user/AdminDashboard.jsx";
 
-function Dashboard() {
-  const { user, logout } = useAuth();
+import Profile from "./pages/Profile.jsx";
+import Help from "./pages/Help.jsx";
 
-  return (
-    <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
-      <h2>Dashboard</h2>
+import BookingsLanding from "./pages/BookingsLanding.jsx";
+import CreateBooking from "./features/booking/CreateBooking.jsx";
+import MyBookings from "./features/booking/MyBookings.jsx";
+import AdminBookings from "./features/booking/AdminBookings.jsx";
 
-      {!user ? (
-        <p>Loading user...</p>
-      ) : (
-        <>
-          <p>
-            <strong>Name:</strong> {user.name}
-          </p>
-          <p>
-            <strong>Email:</strong> {user.email}
-          </p>
-          <p>
-            <strong>Roles:</strong>{" "}
-            {Array.isArray(user.roles) ? user.roles.map((r) => r.name).join(", ") : "N/A"}
-          </p>
-        </>
-      )}
-
-      <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-        <button onClick={logout}>Logout</button>
-        <a href="/admin">Go to Admin Dashboard</a>
-      </div>
-    </div>
-  );
-}
-
-function Unauthorized() {
-  return (
-    <div style={{ padding: 24, fontFamily: "Arial, sans-serif" }}>
-      <h2>Unauthorized</h2>
-      <p>You do not have permission to access this page.</p>
-      <a href="/dashboard">Back to Dashboard</a>
-    </div>
-  );
-}
-
-function HomeRedirect() {
-  const { token, loading } = useAuth();
-
-  if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
-
-  return token ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
-}
+import Unauthorized from "./pages/Unauthorized.jsx";
+import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomeRedirect />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/oauth2/callback" element={<OAuthCallback />} />
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
 
-          {/* Protected user routes */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-          </Route>
+            {/* Public */}
+            <Route element={<PublicLayout />}>
+              <Route path="/landing" element={<Landing />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/oauth2/callback" element={<OAuthCallback />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
+            </Route>
 
-          {/* Protected admin routes */}
-          <Route element={<ProtectedRoute requiredRole="ROLE_ADMIN" />}>
-            <Route path="/admin" element={<AdminDashboard />} />
-          </Route>
+            {/* Authenticated */}
+            <Route element={<ProtectedRoute />}>
+              <Route element={<AppLayout />}>
+                <Route path="/home" element={<Home />} />
 
-          <Route path="/unauthorized" element={<Unauthorized />} />
+                <Route path="/facilities" element={<Facilities />} />
+                <Route path="/facilities/:id" element={<FacilityDetails />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+                {/* Bookings (USER) */}
+                <Route path="/bookings" element={<BookingsLanding />} />
+                <Route path="/bookings/create" element={<CreateBooking />} />
+                <Route path="/bookings/my" element={<MyBookings />} />
+
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/help" element={<Help />} />
+
+                {/* Admin-only */}
+                <Route element={<ProtectedRoute requiredRole="ROLE_ADMIN" />}>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/admin" element={<AdminDashboard />} />
+
+                  {/* Bookings (ADMIN) */}
+                  <Route path="/bookings/admin" element={<AdminBookings />} />
+                </Route>
+              </Route>
+            </Route>
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
