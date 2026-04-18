@@ -31,6 +31,10 @@ import AdminBookings from "./features/booking/AdminBookings.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
+import IncidentManager from "./features/ticket/IncidentManager.jsx";
+import IncidentManager from "./features/ticket/IncidentManager.jsx";
+
+
 export default function App() {
   return (
     <AuthProvider>
@@ -63,6 +67,14 @@ export default function App() {
 
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/help" element={<Help />} />
+
+
+                <Route path="/tickets" element={<IncidentManager />} />
+                <Route element={<AppLayout />}>
+                  {/* ...other protected routes... */}
+                  <Route path="/tickets" element={<IncidentManager />} />
+                </Route>
+
 
                 {/* Admin-only */}
                 <Route element={<ProtectedRoute requiredRole="ROLE_ADMIN" />}>

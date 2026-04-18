@@ -11,14 +11,8 @@ import { SelectInput, TextInput } from "../../components/ui/Input.jsx";
 
 import { createBooking } from "./bookingService.js";
 import { getAllFacilities } from "../facility/facilityService.js";
+import { addMinutes, isPast } from "../../lib/datetime.js";
 
-/**
- * Create booking request (ROLE_USER or ROLE_ADMIN can create).
- *
- * Sends LocalDateTime strings to backend:
- *  - input type="datetime-local" returns "YYYY-MM-DDTHH:mm"
- * which Jackson can parse into LocalDateTime by default.
- */
 export default function CreateBooking() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -33,6 +27,7 @@ export default function CreateBooking() {
   const [endTime, setEndTime] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [touched, setTouched] = useState(false);
+  const [inlineError, setInlineError] = useState("");
 
   const loadFacilities = async () => {
     if (!token) return;
@@ -58,7 +53,6 @@ export default function CreateBooking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, token]);
 
-  // choose a default facility if list loads and nothing selected
   useEffect(() => {
     if (!facilityId && facilities.length > 0) {
       const first = facilities[0];
@@ -66,12 +60,26 @@ export default function CreateBooking() {
     }
   }, [facilities, facilityId]);
 
+  // UX: auto-suggest endTime when startTime changes
+  useEffect(() => {
+    if (!startTime) return;
+    if (!endTime) {
+      setEndTime(addMinutes(startTime, 60));
+      return;
+    }
+    if (endTime <= startTime) {
+      setEndTime(addMinutes(startTime, 60));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startTime]);
+
   const errors = useMemo(() => {
     const e = {};
     if (!facilityId) e.facilityId = "Facility is required.";
     if (!startTime) e.startTime = "Start time is required.";
     if (!endTime) e.endTime = "End time is required.";
     if (startTime && endTime && startTime >= endTime) e.time = "Start time must be before end time.";
+    if (startTime && isPast(startTime)) e.past = "Start time cannot be in the past.";
     return e;
   }, [facilityId, startTime, endTime]);
 
@@ -80,6 +88,7 @@ export default function CreateBooking() {
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
+    setInlineError("");
     if (!isValid) return;
 
     setSubmitting(true);
@@ -94,14 +103,14 @@ export default function CreateBooking() {
         return;
       }
       if (e?.status === 409) {
-        toast.push({
-          variant: "error",
-          title: "Time conflict",
-          message: e?.message || "This facility is already booked for the selected time range.",
-        });
+        const msg = e?.message || "This facility is already booked for the selected time range.";
+        setInlineError(msg);
+        toast.push({ variant: "error", title: "Time conflict", message: msg });
         return;
       }
-      toast.push({ variant: "error", title: "Request failed", message: e?.message || "Unable to create booking." });
+      const msg = e?.message || "Unable to create booking.";
+      setInlineError(msg);
+      toast.push({ variant: "error", title: "Request failed", message: msg });
     } finally {
       setSubmitting(false);
     }
@@ -116,11 +125,9 @@ export default function CreateBooking() {
         title="Request Booking"
         subtitle="Submit a booking request. The system prevents overlapping bookings for the same facility."
         right={
-          <>
-            <Button as={Link} to="/bookings/my" variant="secondary">
-              My bookings
-            </Button>
-          </>
+          <Button as={Link} to="/bookings/my" variant="secondary">
+            My bookings
+          </Button>
         }
       />
 
@@ -153,7 +160,7 @@ export default function CreateBooking() {
                 type="datetime-local"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                error={touched ? errors.startTime : ""}
+                error={touched ? (errors.startTime || errors.past || "") : ""}
               />
 
               <TextInput
@@ -161,12 +168,16 @@ export default function CreateBooking() {
                 type="datetime-local"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                error={touched ? errors.endTime : ""}
+                error={touched ? (errors.endTime || "") : ""}
               />
             </div>
 
             {touched && errors.time ? (
               <div style={{ color: "#ffd5d5", fontWeight: 900, fontSize: 12 }}>{errors.time}</div>
+            ) : null}
+
+            {inlineError ? (
+              <div style={{ color: "#ffd5d5", fontWeight: 900, fontSize: 12 }}>{inlineError}</div>
             ) : null}
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
@@ -183,7 +194,7 @@ export default function CreateBooking() {
               <ul style={{ margin: "6px 0 0 18px" }}>
                 <li>Bookings are created as <strong>PENDING</strong> by default.</li>
                 <li>Admins can approve or reject bookings.</li>
-                <li>Time conflicts are blocked: (startA &lt; endB) AND (endA &gt; startB).</li>
+                <li>Time conflicts are blocked by backend (HTTP 409).</li>
               </ul>
             </div>
           </form>

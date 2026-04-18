@@ -1,17 +1,20 @@
-package com.smartcampus.booking.controller;
+package com.smartcampus.ticket.controller;
 
-import com.smartcampus.booking.dto.BookingRequest;
-import com.smartcampus.booking.dto.BookingResponse;
-import com.smartcampus.booking.dto.BookingStatusUpdateRequest;
-import com.smartcampus.booking.service.BookingService;
+import com.smartcampus.ticket.dto.TicketRequest;
+import com.smartcampus.ticket.dto.TicketResponse;
+import com.smartcampus.ticket.service.TicketService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.NoSuchElementException;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,56 +22,71 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
-@RequestMapping("/api/bookings")
-public class BookingController {
+@RequestMapping("/api/tickets")
+@Validated
+public class TicketController {
 
-    private final BookingService bookingService;
+    private final TicketService ticketService;
 
-    public BookingController(BookingService bookingService) {
-        this.bookingService = bookingService;
+    public TicketController(TicketService ticketService) {
+        this.ticketService = ticketService;
     }
 
-    // USER creates booking
+    // USER creates ticket
     @PostMapping
-    public ResponseEntity<BookingResponse> create(@Valid @RequestBody BookingRequest request) {
+    public ResponseEntity<TicketResponse> create(@Valid @RequestBody TicketRequest request) {
         try {
-            BookingResponse created = bookingService.createBooking(request);
+            TicketResponse created = ticketService.createTicket(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
-        } catch (IllegalStateException e) {
-            // conflict / invalid transition
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
         } catch (SecurityException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
         }
     }
 
-    // USER gets own bookings
-    @GetMapping("/my")
-    public ResponseEntity<List<BookingResponse>> myBookings() {
-        try {
-            return ResponseEntity.ok(bookingService.getMyBookings());
-        } catch (SecurityException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
-        }
-    }
-
-    // ADMIN gets all bookings
+    // ADMIN gets all tickets
     @GetMapping
-    public ResponseEntity<List<BookingResponse>> allBookings() {
+    public ResponseEntity<List<TicketResponse>> all() {
         try {
-            return ResponseEntity.ok(bookingService.getAllBookings());
+            return ResponseEntity.ok(ticketService.getAllTickets());
         } catch (SecurityException e) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
         }
     }
 
-    // ADMIN approve
-    @PutMapping("/{id}/approve")
-    public ResponseEntity<BookingResponse> approve(@PathVariable("id") String id) {
+    // USER gets own tickets
+    @GetMapping("/my")
+    public ResponseEntity<List<TicketResponse>> my() {
         try {
-            return ResponseEntity.ok(bookingService.approveBooking(id));
+            return ResponseEntity.ok(ticketService.getMyTickets());
+        } catch (SecurityException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        }
+    }
+
+    // ADMIN assigns ticket
+    @PatchMapping("/{id}/assign")
+    public ResponseEntity<TicketResponse> assign(@PathVariable("id") String id,
+                                                 @Valid @RequestBody AssignTicketRequest request) {
+        try {
+            return ResponseEntity.ok(ticketService.assignTicket(id, request.getUserId()));
+        } catch (NoSuchElementException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } catch (SecurityException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
+        }
+    }
+
+    // ADMIN marks RESOLVED
+    @PatchMapping("/{id}/resolve")
+    public ResponseEntity<TicketResponse> resolve(@PathVariable("id") String id) {
+        try {
+            return ResponseEntity.ok(ticketService.resolveTicket(id));
         } catch (NoSuchElementException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         } catch (IllegalStateException e) {
@@ -78,13 +96,11 @@ public class BookingController {
         }
     }
 
-    // ADMIN reject (optional request body: { reason })
-    @PutMapping("/{id}/reject")
-    public ResponseEntity<BookingResponse> reject(@PathVariable("id") String id,
-                                                 @RequestBody(required = false) BookingStatusUpdateRequest request) {
+    // ADMIN marks CLOSED
+    @PatchMapping("/{id}/close")
+    public ResponseEntity<TicketResponse> close(@PathVariable("id") String id) {
         try {
-            String reason = (request == null) ? null : request.getReason();
-            return ResponseEntity.ok(bookingService.rejectBooking(id, reason));
+            return ResponseEntity.ok(ticketService.closeTicket(id));
         } catch (NoSuchElementException e) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         } catch (IllegalStateException e) {
@@ -94,17 +110,10 @@ public class BookingController {
         }
     }
 
-    // OWNER cancel
-    @PutMapping("/{id}/cancel")
-    public ResponseEntity<BookingResponse> cancel(@PathVariable("id") String id) {
-        try {
-            return ResponseEntity.ok(bookingService.cancelBooking(id));
-        } catch (NoSuchElementException e) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
-        } catch (SecurityException e) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, e.getMessage(), e);
-        }
+    @Data
+    @NoArgsConstructor
+    public static class AssignTicketRequest {
+        @NotBlank(message = "userId is required")
+        private String userId;
     }
 }

@@ -18,17 +18,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BookingService {
 
-    private static final EnumSet<BookingStatus> CONFLICT_STATUSES = EnumSet.of(BookingStatus.PENDING, BookingStatus.APPROVED);
+    private static final EnumSet<BookingStatus> CONFLICT_STATUSES =
+            EnumSet.of(BookingStatus.PENDING, BookingStatus.APPROVED);
 
     private final BookingRepository bookingRepository;
 
     public BookingService(BookingRepository bookingRepository) {
         this.bookingRepository = bookingRepository;
     }
-
-    // -------------------------
-    // Public API
-    // -------------------------
 
     @Transactional
     public BookingResponse createBooking(BookingRequest req) {
@@ -44,6 +41,7 @@ public class BookingService {
         booking.setStartTime(req.getStartTime());
         booking.setEndTime(req.getEndTime());
         booking.setStatus(BookingStatus.PENDING);
+        booking.setRejectReason(null);
 
         Booking saved = bookingRepository.save(booking);
         return toResponse(saved);
@@ -79,23 +77,40 @@ public class BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
 
-        // re-check conflicts at approval time (important)
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalStateException("Only PENDING bookings can be approved");
+        }
+
         validateTimeRange(booking.getStartTime(), booking.getEndTime());
         ensureNoConflict(booking.getFacilityId(), booking.getStartTime(), booking.getEndTime(), booking.getId());
 
         booking.setStatus(BookingStatus.APPROVED);
+        booking.setRejectReason(null); // clear any previous reason
         return toResponse(bookingRepository.save(booking));
     }
 
     @Transactional
     public BookingResponse rejectBooking(String bookingId) {
+        return rejectBooking(bookingId, null);
+    }
+
+    @Transactional
+    public BookingResponse rejectBooking(String bookingId, String reason) {
         Authentication auth = requireAuth();
         requireAdmin(auth);
 
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new NoSuchElementException("Booking not found"));
 
+        if (booking.getStatus() != BookingStatus.PENDING) {
+            throw new IllegalStateException("Only PENDING bookings can be rejected");
+        }
+
         booking.setStatus(BookingStatus.REJECTED);
+
+        String cleaned = (reason == null) ? null : reason.trim();
+        booking.setRejectReason((cleaned == null || cleaned.isBlank()) ? null : cleaned);
+
         return toResponse(bookingRepository.save(booking));
     }
 
@@ -111,11 +126,12 @@ public class BookingService {
             throw new SecurityException("Only the booking owner can cancel this booking");
         }
 
-        if (booking.getStatus() == BookingStatus.REJECTED) {
-            throw new IllegalStateException("Rejected bookings cannot be cancelled");
+        if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.APPROVED) {
+            throw new IllegalStateException("Only PENDING or APPROVED bookings can be cancelled");
         }
 
         booking.setStatus(BookingStatus.CANCELLED);
+        booking.setRejectReason(null); // not relevant after cancel
         return toResponse(bookingRepository.save(booking));
     }
 
@@ -132,12 +148,6 @@ public class BookingService {
         }
     }
 
-    /**
-     * Checks for overlapping bookings for same facility (PENDING/APPROVED).
-     *
-     * Conflict condition:
-     * existing.startTime < requestedEnd AND existing.endTime > requestedStart
-     */
     private void ensureNoConflict(String facilityId, LocalDateTime start, LocalDateTime end, String excludeBookingId) {
         if (facilityId == null || facilityId.isBlank()) {
             throw new IllegalArgumentException("facilityId is required");
@@ -169,7 +179,8 @@ public class BookingService {
                 b.getFacilityId(),
                 b.getStartTime(),
                 b.getEndTime(),
-                b.getStatus()
+                b.getStatus(),
+                b.getRejectReason()
         );
     }
 
@@ -182,8 +193,6 @@ public class BookingService {
     }
 
     private String currentUserId(Authentication a) {
-        // Compile-safe identity source in most JWT setups:
-        // Authentication.getName() is typically username/email (or userId if configured).
         String name = a.getName();
         if (name == null || name.isBlank()) {
             throw new SecurityException("Missing authenticated user identity");

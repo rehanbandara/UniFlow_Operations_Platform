@@ -1,3 +1,6 @@
+import { apiRequest } from "../../lib/apiClient.js";
+
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081";
 const BASE_PATH = "/api/facilities";
 
@@ -37,11 +40,11 @@ async function request(path, { method = "GET", token, body } = {}) {
 }
 
 export function getAllFacilities(token) {
-  return request(`${BASE_PATH}`, { method: "GET", token });
+  return apiRequest(`${BASE_PATH}`, { method: "GET", token });
 }
 
 export function getFacilityById(token, id) {
-  return request(`${BASE_PATH}/${encodeURIComponent(id)}`, { method: "GET", token });
+  return apiRequest(`${BASE_PATH}/${encodeURIComponent(id)}`, { method: "GET", token });
 }
 
 export function createFacility(token, data) {

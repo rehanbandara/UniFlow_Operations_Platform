@@ -12,16 +12,28 @@ public class BookingResponse {
     private LocalDateTime endTime;
     private BookingStatus status;
 
+    /**
+     * Optional: populated when status is REJECTED (set by admin).
+     */
+    private String rejectReason;
+
     public BookingResponse() {
     }
 
-    public BookingResponse(String id, String userId, String facilityId, LocalDateTime startTime, LocalDateTime endTime, BookingStatus status) {
+    public BookingResponse(String id,
+                           String userId,
+                           String facilityId,
+                           LocalDateTime startTime,
+                           LocalDateTime endTime,
+                           BookingStatus status,
+                           String rejectReason) {
         this.id = id;
         this.userId = userId;
         this.facilityId = facilityId;
         this.startTime = startTime;
         this.endTime = endTime;
         this.status = status;
+        this.rejectReason = rejectReason;
     }
 
     public String getId() {
@@ -71,4 +83,13 @@ public class BookingResponse {
     public void setStatus(BookingStatus status) {
         this.status = status;
     }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
+    }
 }
+

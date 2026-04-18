@@ -2,11 +2,7 @@ import React, { useMemo } from "react";
 import Button from "../../components/ui/Button.jsx";
 import Card from "../../components/ui/Card.jsx";
 import DataTable from "../../components/ui/DataTable.jsx";
-
-function formatLocalDateTime(value) {
-  if (!value) return "-";
-  return String(value).replace("T", " ").slice(0, 16);
-}
+import { formatLocalDateTime } from "../../lib/datetime.js";
 
 function statusColor(status) {
   const s = String(status || "").toUpperCase();
@@ -19,13 +15,27 @@ function statusColor(status) {
 
 export default function BookingTable({
   bookings = [],
+  facilityById = null, // { [facilityId]: facility }
   onApprove,
   onReject,
   busyId = null,
 }) {
   const columns = useMemo(
     () => [
-      { key: "facilityId", header: "Facility", render: (r) => <span style={{ fontWeight: 900 }}>{r?.facilityId || "-"}</span> },
+      {
+        key: "facilityId",
+        header: "Facility",
+        render: (r) => {
+          const id = r?.facilityId ? String(r.facilityId) : "";
+          const name = facilityById && id ? facilityById[id]?.name : null;
+          const label = name ? `${name} (${id})` : (id || "-");
+          return (
+            <span style={{ fontWeight: 900 }} title={label}>
+              {label}
+            </span>
+          );
+        },
+      },
       { key: "userId", header: "User", render: (r) => <span style={{ color: "#a9b7d5", fontWeight: 900 }}>{r?.userId || "-"}</span> },
       { key: "startTime", header: "Start", render: (r) => formatLocalDateTime(r?.startTime) },
       { key: "endTime", header: "End", render: (r) => formatLocalDateTime(r?.endTime) },
@@ -71,7 +81,7 @@ export default function BookingTable({
         },
       },
     ],
-    [onApprove, onReject, busyId]
+    [onApprove, onReject, busyId, facilityById]
   );
 
   return (

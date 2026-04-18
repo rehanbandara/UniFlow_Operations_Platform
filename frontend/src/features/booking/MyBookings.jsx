@@ -10,7 +10,9 @@ import EmptyState from "../../components/ui/EmptyState.jsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.jsx";
 
 import BookingCard from "./BookingCard.jsx";
+import BookingListSkeleton from "./BookingListSkeleton.jsx";
 import { cancelBooking, getMyBookings } from "./bookingService.js";
+import { getAllFacilities } from "../facility/facilityService.js";
 
 export default function MyBookings() {
   const { token, loading, logout } = useAuth();
@@ -20,11 +22,35 @@ export default function MyBookings() {
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
 
+  const [facilities, setFacilities] = useState([]);
+  const [facLoading, setFacLoading] = useState(true);
+
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toCancel, setToCancel] = useState(null);
   const [cancelling, setCancelling] = useState(false);
 
-  const load = async () => {
+  const facilityById = useMemo(() => {
+    const map = {};
+    for (const f of facilities) {
+      if (f?.id != null) map[String(f.id)] = f;
+    }
+    return map;
+  }, [facilities]);
+
+  const loadFacilities = async () => {
+    if (!token) return;
+    setFacLoading(true);
+    try {
+      const data = await getAllFacilities(token);
+      setFacilities(Array.isArray(data) ? data : []);
+    } catch {
+      // If facilities can't load, we still show bookings with facilityId fallback.
+    } finally {
+      setFacLoading(false);
+    }
+  };
+
+  const loadBookings = async () => {
     if (!token) return;
     setFetching(true);
     setError("");
@@ -43,15 +69,16 @@ export default function MyBookings() {
     }
   };
 
+  const loadAll = async () => {
+    await Promise.all([loadFacilities(), loadBookings()]);
+  };
+
   useEffect(() => {
-    if (!loading && token) load();
+    if (!loading && token) loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, token]);
 
-  const sorted = useMemo(() => {
-    // service already returns desc, but keep stable
-    return [...rows];
-  }, [rows]);
+  const sorted = useMemo(() => [...rows], [rows]);
 
   const askCancel = (booking) => {
     setToCancel(booking);
@@ -66,7 +93,7 @@ export default function MyBookings() {
       toast.push({ variant: "success", title: "Cancelled", message: "Booking cancelled successfully." });
       setConfirmOpen(false);
       setToCancel(null);
-      await load();
+      await loadBookings();
     } catch (e) {
       if (e?.status === 401) {
         toast.push({ variant: "error", title: "Session expired", message: "Please sign in again." });
@@ -81,6 +108,8 @@ export default function MyBookings() {
 
   if (!loading && !token) return <Navigate to="/landing" replace />;
 
+  const showSkeleton = fetching || facLoading;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <PageHeader
@@ -92,7 +121,7 @@ export default function MyBookings() {
             <Button as={Link} to="/bookings/create" variant="primary">
               + Request booking
             </Button>
-            <Button variant="secondary" onClick={load} loading={fetching}>
+            <Button variant="secondary" onClick={loadAll} loading={showSkeleton}>
               Refresh
             </Button>
           </>
@@ -101,10 +130,10 @@ export default function MyBookings() {
 
       {error ? (
         <Card style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.10)" }}>
-          <EmptyState title="Couldn’t load bookings" description={error} actionLabel="Retry" onAction={load} />
+          <EmptyState title="Couldn’t load bookings" description={error} actionLabel="Retry" onAction={loadBookings} />
         </Card>
-      ) : fetching ? (
-        <Card>Loading bookings…</Card>
+      ) : showSkeleton ? (
+        <BookingListSkeleton count={6} />
       ) : sorted.length === 0 ? (
         <Card>
           <EmptyState
@@ -116,9 +145,21 @@ export default function MyBookings() {
         </Card>
       ) : (
         <div style={styles.grid}>
-          {sorted.map((b) => (
-            <BookingCard key={b.id} booking={b} onCancel={askCancel} cancelLoading={cancelling && toCancel?.id === b.id} />
-          ))}
+          {sorted.map((b) => {
+            const fid = b?.facilityId != null ? String(b.facilityId) : "";
+            const f = fid ? facilityById[fid] : null;
+            const facilityName = f?.name ? `${f.name} (${fid})` : null;
+
+            return (
+              <BookingCard
+                key={b.id}
+                booking={b}
+                facilityName={facilityName}
+                onCancel={askCancel}
+                cancelLoading={cancelling && toCancel?.id === b.id}
+              />
+            );
+          })}
         </div>
       )}
 

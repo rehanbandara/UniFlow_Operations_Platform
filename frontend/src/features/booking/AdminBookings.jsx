@@ -8,33 +8,55 @@ import Button from "../../components/ui/Button.jsx";
 import PageHeader from "../../components/ui/PageHeader.jsx";
 import EmptyState from "../../components/ui/EmptyState.jsx";
 import ConfirmDialog from "../../components/ui/ConfirmDialog.jsx";
+import { TextInput } from "../../components/ui/Input.jsx";
 
 import BookingTable from "./BookingTable.jsx";
 import { approveBooking, getAllBookings, rejectBooking } from "./bookingService.js";
-
-function hasRole(user, roleName) {
-  const roles = user?.roles;
-  if (!Array.isArray(roles)) return false;
-  return roles.some((r) => r?.name === roleName);
-}
+import { getAllFacilities } from "../facility/facilityService.js";
+import { isAdmin as isAdminRole } from "../../lib/authz.js";
 
 export default function AdminBookings() {
   const { token, user, loading, logout } = useAuth();
   const toast = useToast();
 
-  const isAdmin = useMemo(() => hasRole(user, "ROLE_ADMIN"), [user]);
+  const isAdmin = useMemo(() => isAdminRole(user), [user]);
 
   const [rows, setRows] = useState([]);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
 
+  const [facilities, setFacilities] = useState([]);
+  const [facLoading, setFacLoading] = useState(true);
+
+  const facilityById = useMemo(() => {
+    const map = {};
+    for (const f of facilities) {
+      if (f?.id != null) map[String(f.id)] = f;
+    }
+    return map;
+  }, [facilities]);
+
   const [busyId, setBusyId] = useState(null);
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toReject, setToReject] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
-  const load = async () => {
+  const loadFacilities = async () => {
+    if (!token) return;
+    setFacLoading(true);
+    try {
+      const data = await getAllFacilities(token);
+      setFacilities(Array.isArray(data) ? data : []);
+    } catch {
+      // ok: admin can still manage bookings with facilityId fallback
+    } finally {
+      setFacLoading(false);
+    }
+  };
+
+  const loadBookings = async () => {
     if (!token) return;
     setFetching(true);
     setError("");
@@ -53,8 +75,12 @@ export default function AdminBookings() {
     }
   };
 
+  const loadAll = async () => {
+    await Promise.all([loadFacilities(), loadBookings()]);
+  };
+
   useEffect(() => {
-    if (!loading && token && isAdmin) load();
+    if (!loading && token && isAdmin) loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, token, isAdmin]);
 
@@ -64,7 +90,7 @@ export default function AdminBookings() {
     try {
       await approveBooking(token, booking.id);
       toast.push({ variant: "success", title: "Approved", message: "Booking approved." });
-      await load();
+      await loadBookings();
     } catch (e) {
       if (e?.status === 401) {
         toast.push({ variant: "error", title: "Session expired", message: "Please sign in again." });
@@ -83,6 +109,7 @@ export default function AdminBookings() {
 
   const askReject = (booking) => {
     setToReject(booking);
+    setRejectReason("");
     setConfirmOpen(true);
   };
 
@@ -90,11 +117,12 @@ export default function AdminBookings() {
     if (!toReject?.id) return;
     setRejecting(true);
     try {
-      await rejectBooking(token, toReject.id);
+      await rejectBooking(token, toReject.id, rejectReason);
       toast.push({ variant: "success", title: "Rejected", message: "Booking rejected." });
       setConfirmOpen(false);
       setToReject(null);
-      await load();
+      setRejectReason("");
+      await loadBookings();
     } catch (e) {
       if (e?.status === 401) {
         toast.push({ variant: "error", title: "Session expired", message: "Please sign in again." });
@@ -115,9 +143,9 @@ export default function AdminBookings() {
       <PageHeader
         kicker="Admin"
         title="Booking Management"
-        subtitle="Approve or reject booking requests. Conflicts are prevented by backend."
+        subtitle="Approve or reject booking requests. Conflicts are blocked by the backend."
         right={
-          <Button variant="secondary" onClick={load} loading={fetching}>
+          <Button variant="secondary" onClick={loadAll} loading={fetching || facLoading}>
             Refresh
           </Button>
         }
@@ -125,18 +153,37 @@ export default function AdminBookings() {
 
       {error ? (
         <Card style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.10)" }}>
-          <EmptyState title="Couldn’t load bookings" description={error} actionLabel="Retry" onAction={load} />
+          <EmptyState title="Couldn’t load bookings" description={error} actionLabel="Retry" onAction={loadBookings} />
         </Card>
       ) : fetching ? (
         <Card>Loading bookings…</Card>
       ) : (
-        <BookingTable bookings={rows} onApprove={doApprove} onReject={askReject} busyId={busyId} />
+        <BookingTable
+          bookings={rows}
+          facilityById={facilityById}
+          onApprove={doApprove}
+          onReject={askReject}
+          busyId={busyId}
+        />
       )}
 
       <ConfirmDialog
         open={confirmOpen}
         title="Reject booking?"
-        message={`Reject booking for facility "${toReject?.facilityId || "-"}" (user "${toReject?.userId || "-"}")?`}
+        message={
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              Reject booking for facility <strong>{toReject?.facilityId || "-"}</strong> (user{" "}
+              <strong>{toReject?.userId || "-"}</strong>)?
+            </div>
+            <TextInput
+              label="Reason (optional)"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Maintenance / not available / invalid timing"
+            />
+          </div>
+        }
         confirmText="Reject"
         cancelText="Cancel"
         danger
@@ -145,6 +192,7 @@ export default function AdminBookings() {
           if (!rejecting) {
             setConfirmOpen(false);
             setToReject(null);
+            setRejectReason("");
           }
         }}
         onConfirm={doReject}

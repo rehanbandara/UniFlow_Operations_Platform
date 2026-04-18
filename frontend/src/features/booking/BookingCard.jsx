@@ -1,13 +1,7 @@
 import React, { useMemo } from "react";
 import Card from "../../components/ui/Card.jsx";
 import Button from "../../components/ui/Button.jsx";
-
-function formatLocalDateTime(value) {
-  if (!value) return "-";
-  // Backend returns LocalDateTime as "YYYY-MM-DDTHH:mm:ss" (usually).
-  // We keep it simple and human-readable without timezone assumptions.
-  return String(value).replace("T", " ").slice(0, 16);
-}
+import { formatLocalDateTime } from "../../lib/datetime.js";
 
 function statusStyles(status) {
   const s = String(status || "").toUpperCase();
@@ -18,7 +12,7 @@ function statusStyles(status) {
   return { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#e8eefc" };
 }
 
-export default function BookingCard({ booking, onCancel, cancelLoading = false }) {
+export default function BookingCard({ booking, facilityName, onCancel, cancelLoading = false }) {
   const canCancel = useMemo(() => {
     const s = String(booking?.status || "").toUpperCase();
     return s === "PENDING" || s === "APPROVED";
@@ -26,12 +20,17 @@ export default function BookingCard({ booking, onCancel, cancelLoading = false }
 
   const statusStyle = useMemo(() => statusStyles(booking?.status), [booking?.status]);
 
+  const facilityLabel = facilityName || booking?.facilityId || "-";
+
+  const isRejected = String(booking?.status || "").toUpperCase() === "REJECTED";
+  const rejectReason = booking?.rejectReason || "";
+
   return (
     <Card style={{ padding: 14 }}>
       <div style={styles.topRow}>
         <div style={{ minWidth: 0 }}>
-          <div style={styles.facility}>
-            Facility: <span style={{ color: "#cfe3ff" }}>{booking?.facilityId || "-"}</span>
+          <div style={styles.facility} title={facilityLabel}>
+            Facility: <span style={{ color: "#cfe3ff" }}>{facilityLabel}</span>
           </div>
           <div style={styles.time}>
             {formatLocalDateTime(booking?.startTime)} → {formatLocalDateTime(booking?.endTime)}
@@ -45,6 +44,12 @@ export default function BookingCard({ booking, onCancel, cancelLoading = false }
         <div>
           <span style={styles.label}>Booking ID:</span> {booking?.id || "-"}
         </div>
+
+        {isRejected && rejectReason ? (
+          <div style={{ marginTop: 6 }}>
+            <span style={styles.label}>Reason:</span> {rejectReason}
+          </div>
+        ) : null}
       </div>
 
       {canCancel ? (

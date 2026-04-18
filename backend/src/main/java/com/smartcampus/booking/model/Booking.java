@@ -2,15 +2,25 @@ package com.smartcampus.booking.model;
 
 import java.time.LocalDateTime;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
  * Booking document stored in MongoDB.
  *
- * Conflict logic is enforced in the service layer.
+ * Performance note:
+ * - Conflict checks query by facilityId + status + (startTime,endTime) overlap.
+ * - The compound index below improves that query for real-world scale.
  */
 @Document(collection = "bookings")
+@CompoundIndexes({
+        @CompoundIndex(
+                name = "facility_status_time_idx",
+                def = "{'facilityId':1,'status':1,'startTime':1,'endTime':1}"
+        )
+})
 public class Booking {
 
     @Id
@@ -31,16 +41,29 @@ public class Booking {
     @Indexed
     private BookingStatus status;
 
+    /**
+     * Optional reason set by admin when rejecting a booking.
+     * (Only meaningful when status == REJECTED)
+     */
+    private String rejectReason;
+
     public Booking() {
     }
 
-    public Booking(String id, String userId, String facilityId, LocalDateTime startTime, LocalDateTime endTime, BookingStatus status) {
+    public Booking(String id,
+                   String userId,
+                   String facilityId,
+                   LocalDateTime startTime,
+                   LocalDateTime endTime,
+                   BookingStatus status,
+                   String rejectReason) {
         this.id = id;
         this.userId = userId;
         this.facilityId = facilityId;
         this.startTime = startTime;
         this.endTime = endTime;
         this.status = status;
+        this.rejectReason = rejectReason;
     }
 
     public String getId() {
@@ -89,5 +112,13 @@ public class Booking {
 
     public void setStatus(BookingStatus status) {
         this.status = status;
+    }
+
+    public String getRejectReason() {
+        return rejectReason;
+    }
+
+    public void setRejectReason(String rejectReason) {
+        this.rejectReason = rejectReason;
     }
 }
