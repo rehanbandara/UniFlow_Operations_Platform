@@ -1,5 +1,6 @@
 package com.smartcampus.ticket.service;
 
+import com.smartcampus.notification.service.NotificationService;
 import com.smartcampus.ticket.dto.TicketRequest;
 import com.smartcampus.ticket.dto.TicketResponse;
 import com.smartcampus.ticket.model.Ticket;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TicketService {
 
     private final TicketRepository ticketRepository;
+    private final NotificationService notificationService;
 
     // -------------------------
     // Public API
@@ -88,7 +90,20 @@ public class TicketService {
         ticket.setAssignedTo(cleanedUserId);
         ticket.setStatus(Ticket.Status.IN_PROGRESS);
 
-        return toResponse(ticketRepository.save(ticket));
+        Ticket saved = ticketRepository.save(ticket);
+
+        // Notification trigger (non-blocking): notify assigned user
+        try {
+            String title = (saved.getTitle() == null || saved.getTitle().isBlank()) ? "a ticket" : saved.getTitle();
+            notificationService.createNotification(
+                    cleanedUserId,
+                    "You have been assigned ticket: " + title
+            );
+        } catch (Exception ignored) {
+            // assignment should not fail if notification fails
+        }
+
+        return toResponse(saved);
     }
 
     @Transactional
@@ -104,7 +119,21 @@ public class TicketService {
         }
 
         ticket.setStatus(Ticket.Status.RESOLVED);
-        return toResponse(ticketRepository.save(ticket));
+
+        Ticket saved = ticketRepository.save(ticket);
+
+        // Notification trigger (non-blocking): notify ticket creator
+        try {
+            String title = (saved.getTitle() == null || saved.getTitle().isBlank()) ? "Your ticket" : ("Your ticket: " + saved.getTitle());
+            notificationService.createNotification(
+                    saved.getCreatedBy(),
+                    title + " has been resolved"
+            );
+        } catch (Exception ignored) {
+            // resolve should not fail if notification fails
+        }
+
+        return toResponse(saved);
     }
 
     @Transactional

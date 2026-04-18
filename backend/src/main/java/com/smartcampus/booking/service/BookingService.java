@@ -5,6 +5,7 @@ import com.smartcampus.booking.dto.BookingResponse;
 import com.smartcampus.booking.model.Booking;
 import com.smartcampus.booking.model.BookingStatus;
 import com.smartcampus.booking.repository.BookingRepository;
+import com.smartcampus.notification.service.NotificationService;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -22,9 +23,11 @@ public class BookingService {
             EnumSet.of(BookingStatus.PENDING, BookingStatus.APPROVED);
 
     private final BookingRepository bookingRepository;
+    private final NotificationService notificationService;
 
-    public BookingService(BookingRepository bookingRepository) {
+    public BookingService(BookingRepository bookingRepository, NotificationService notificationService) {
         this.bookingRepository = bookingRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -86,7 +89,17 @@ public class BookingService {
 
         booking.setStatus(BookingStatus.APPROVED);
         booking.setRejectReason(null); // clear any previous reason
-        return toResponse(bookingRepository.save(booking));
+
+        Booking saved = bookingRepository.save(booking);
+
+        // Notification trigger (non-blocking)
+        try {
+            notificationService.createNotification(saved.getUserId(), "Your booking has been approved");
+        } catch (Exception ignored) {
+            // booking approval should not fail if notification fails
+        }
+
+        return toResponse(saved);
     }
 
     @Transactional
@@ -111,7 +124,19 @@ public class BookingService {
         String cleaned = (reason == null) ? null : reason.trim();
         booking.setRejectReason((cleaned == null || cleaned.isBlank()) ? null : cleaned);
 
-        return toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+
+        // Notification trigger (non-blocking)
+        String msg = (saved.getRejectReason() != null && !saved.getRejectReason().isBlank())
+                ? "Your booking has been rejected: " + saved.getRejectReason()
+                : "Your booking has been rejected";
+        try {
+            notificationService.createNotification(saved.getUserId(), msg);
+        } catch (Exception ignored) {
+            // booking rejection should not fail if notification fails
+        }
+
+        return toResponse(saved);
     }
 
     @Transactional
